@@ -67,13 +67,19 @@ def glog_library(namespace='google', with_gflags=1, **kwargs):
             '-DHAVE_STRING_H',
             # Enable dumping stacktrace upon sigaction.
             '-DHAVE_SIGACTION',
+            '-DHAVE_EXECINFO_H',
+            '-DHAVE_SYMBOLIZE',
             # For logging.cc.
             '-DHAVE_PREAD',
             '-DHAVE___ATTRIBUTE__',
 
             # Include generated header files.
             '-I%s/glog_internal' % gendir,
-        ] + ([
+        ] + select({
+            "@bazel_tools//src/conditions:darwin": ['-DHAVE_DLADDR'],
+            "//conditions:default": [],
+        }) +
+        ([
             # Use gflags to parse CLI arguments.
             '-DHAVE_LIB_GFLAGS',
         ] if with_gflags else []),
