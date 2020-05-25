@@ -143,7 +143,7 @@ GLOG_DEFINE_int32(logemaillevel, 999,
                   "Email log messages logged at this level or higher"
                   " (0 means email all; 3 means email FATAL only;"
                   " ...)");
-GLOG_DEFINE_string(logmailer, "/bin/mail",
+GLOG_DEFINE_string(logmailer, "",
                    "Mailer used to send logging email");
 
 // Compute the default value for --log_dir
@@ -354,6 +354,7 @@ struct LogMessage::LogMessageData  {
   size_t num_chars_to_syslog_;  // # of chars of msg to send to syslog
   const char* basename_;        // basename of file that called LOG
   const char* fullname_;        // fullname of file that called LOG
+  const char* functionname_;    // function name that called LOG
   bool has_been_flushed_;       // false => data has not been flushed
   bool first_fatal_;            // true => this was first fatal msg
 
@@ -1206,10 +1207,17 @@ LogMessage::LogMessage(const char* file, int line, LogSeverity severity,
   data_->message_ = message;  // override Init()'s setting to NULL
 }
 
+LogMessage::LogMessage(const char* file, int line, LogSeverity severity,
+                       const char* funcname)
+    : allocated_(NULL) {
+  Init(file, line, severity, &LogMessage::SendToLog, funcname);
+}
+
 void LogMessage::Init(const char* file,
                       int line,
                       LogSeverity severity,
-                      void (LogMessage::*send_method)()) {
+                      void (LogMessage::*send_method)(),
+                      const char *funcname) {
   allocated_ = NULL;
   if (severity != GLOG_FATAL || !exit_on_dfatal) {
 #ifdef GLOG_THREAD_LOCAL_STORAGE
@@ -1256,13 +1264,14 @@ void LogMessage::Init(const char* file,
   data_->basename_ = const_basename(file);
   data_->fullname_ = file;
   data_->has_been_flushed_ = false;
+  data_->functionname_ = funcname;
 
   // If specified, prepend a prefix to each line.  For example:
   //    I1018 160715 f5d4fbb0 logging.cc:1153]
   //    (log level, GMT month, date, time, thread_id, file basename, line)
   // We exclude the thread_id for the default thread.
   if (FLAGS_log_prefix && (line != kNoLogPrefix)) {
-    stream() << LogSeverityNames[severity][0]
+    /*stream() << LogSeverityNames[severity][0]
              << setw(2) << 1+data_->tm_time_.tm_mon
              << setw(2) << data_->tm_time_.tm_mday
              << ' '
@@ -1274,7 +1283,25 @@ void LogMessage::Init(const char* file,
              << setfill(' ') << setw(5)
              << static_cast<unsigned int>(GetTID()) << setfill('0')
              << ' '
-             << data_->basename_ << ':' << data_->line_ << "] ";
+             << data_->basename_ << ':' << data_->line_ << "] ";*/
+    stream() << setw(4) << 1900+data_->tm_time_.tm_year << '-'
+             << setw(2) << 1+data_->tm_time_.tm_mon     << '-'
+             << setw(2) << data_->tm_time_.tm_mday
+             << ' '
+             << setw(2) << data_->tm_time_.tm_hour  << ':'
+             << setw(2) << data_->tm_time_.tm_min   << ':'
+             << setw(2) << data_->tm_time_.tm_sec   << ","
+             << setw(3) << usecs/1000
+             << ' '
+             << LogSeverityNames[severity][0]
+             << ' '
+             << setfill(' ') << setw(5)
+             << static_cast<unsigned int>(getpid()) << setfill(' ')
+             << ' ' << setw(5)
+             << static_cast<unsigned int>(GetTID()) << setfill('0')
+             << ' '
+             << data_->basename_ << ':' << data_->line_
+             << ':' << data_->functionname_ << "] ";
   }
   data_->num_prefix_chars_ = data_->stream_.pcount();
 
@@ -1784,9 +1811,12 @@ static bool SendEmailInternal(const char*dest, const char *subject,
       fprintf(stderr, "Trying to send TITLE: %s BODY: %s to %s\n",
               subject, body, dest);
     }
-
+    string logmailer = FLAGS_logmailer;
+    if (logmailer.empty()) {
+        logmailer = "/bin/mail";
+    }
     string cmd =
-        FLAGS_logmailer + " -s" +
+        logmailer + " -s" +
         ShellEscape(subject) + " " + ShellEscape(dest);
     VLOG(4) << "Mailing command: " << cmd;
 

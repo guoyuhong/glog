@@ -1204,6 +1204,7 @@ public:
   // Using this constructor instead of the more complex constructor above
   // saves 17 bytes per call site.
   LogMessage(const char* file, int line, LogSeverity severity);
+  LogMessage(const char* file, int line, LogSeverity severity, const char* funcname);
 
   // Constructor to log this message to a specified sink (if not NULL).
   // Implied are: ctr = 0, send_method = &LogMessage::SendToSinkAndLog if
@@ -1265,7 +1266,7 @@ private:
   void SaveOrSendToLog();  // Save to stringvec if provided, else to logs
 
   void Init(const char* file, int line, LogSeverity severity,
-            void (LogMessage::*send_method)());
+            void (LogMessage::*send_method)(), const char* funcname="");
 
   // Used to fill in crash information during LOG(FATAL) failures.
   void RecordCrashReason(glog_internal_namespace_::CrashReason* reason);
